@@ -74,6 +74,31 @@
   .reveal{ opacity:0; transform:translateY(26px); transition:opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1); }
   .reveal.in{ opacity:1; transform:none; }
   @media (prefers-reduced-motion:reduce){ .hero h1{ animation:none; } .reveal{ opacity:1 !important; transform:none !important; } }
+
+  /* Пульсирующая точка у LIVE-активов */
+  .data-badge.live::before{ content:''; display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--green);
+    margin-right:5px; vertical-align:middle; animation:livePulse 1.9s ease-out infinite; }
+  @keyframes livePulse{ 0%{ box-shadow:0 0 0 0 rgba(63,203,130,0.55); } 70%{ box-shadow:0 0 0 6px rgba(63,203,130,0); } 100%{ box-shadow:0 0 0 0 rgba(63,203,130,0); } }
+
+  /* Свечение сигналов BUY / SELL */
+  .verdict.buy{ box-shadow:0 0 0 1px rgba(63,203,130,0.25), 0 0 13px -3px rgba(63,203,130,0.55); animation:glowBuy 2.6s ease-in-out infinite; }
+  .verdict.sell{ box-shadow:0 0 0 1px rgba(232,85,90,0.25), 0 0 13px -3px rgba(232,85,90,0.55); animation:glowSell 2.6s ease-in-out infinite; }
+  @keyframes glowBuy{ 0%,100%{ box-shadow:0 0 0 1px rgba(63,203,130,0.22), 0 0 10px -4px rgba(63,203,130,0.45); } 50%{ box-shadow:0 0 0 1px rgba(63,203,130,0.32), 0 0 16px -2px rgba(63,203,130,0.7); } }
+  @keyframes glowSell{ 0%,100%{ box-shadow:0 0 0 1px rgba(232,85,90,0.22), 0 0 10px -4px rgba(232,85,90,0.45); } 50%{ box-shadow:0 0 0 1px rgba(232,85,90,0.32), 0 0 16px -2px rgba(232,85,90,0.7); } }
+
+  /* Интро-заставка */
+  #introSplash{ position:fixed; inset:0; z-index:9999; background:var(--bg); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:20px; animation:introOut 0.6s ease 1.15s forwards; }
+  #introSplash .il-logo{ font-family:var(--disp); font-size:clamp(28px,5vw,38px); font-weight:700; letter-spacing:0.04em;
+    opacity:0; animation:introLogo 0.7s ease forwards; }
+  #introSplash .il-logo span{ color:var(--blue); }
+  #introSplash .il-sub{ font-family:var(--mono); font-size:10.5px; letter-spacing:0.22em; color:var(--text-dim);
+    opacity:0; animation:introLogo 0.7s ease 0.25s forwards; }
+  #introSplash path{ animation:introDraw 1s ease 0.2s forwards; }
+  @keyframes introLogo{ from{ opacity:0; transform:translateY(9px); } to{ opacity:1; transform:none; } }
+  @keyframes introDraw{ to{ stroke-dashoffset:0; } }
+  @keyframes introOut{ to{ opacity:0; visibility:hidden; pointer-events:none; } }
+  @media (prefers-reduced-motion:reduce){ .data-badge.live::before, .verdict.buy, .verdict.sell{ animation:none; } #introSplash{ display:none !important; } }
   .hero h1{ font-family:var(--disp); font-size:clamp(26px, 3vw, 34px); font-weight:600; line-height:1.15; max-width:520px; }
   .hero p{ color:var(--text-dim); font-size:14px; margin-top:12px; max-width:460px; }
   .hero-stamp{ font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:right; white-space:nowrap; }
@@ -172,6 +197,21 @@
 </style>
 </head>
 <body>
+
+<div id="introSplash" aria-hidden="true">
+  <div class="il-logo">MERI<span>DIAN</span></div>
+  <svg width="230" height="42" viewBox="0 0 230 42" fill="none" aria-hidden="true">
+    <path d="M0 21 H62 L74 21 L82 7 L94 35 L106 21 L122 21 L130 13 L140 29 L150 21 H230"
+      stroke="#5B9BD8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+      stroke-dasharray="300" stroke-dashoffset="300"/>
+  </svg>
+  <div class="il-sub">MULTI-ASSET TERMINAL</div>
+</div>
+<script>
+  // Показать заставку только раз за сессию (не мигать при обновлениях)
+  if(sessionStorage.getItem('meridianIntro')){ var _s=document.getElementById('introSplash'); if(_s) _s.style.display='none'; }
+  else { sessionStorage.setItem('meridianIntro','1'); }
+</script>
 
 <div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"></div></div>
 
@@ -599,6 +639,37 @@
     }, { threshold:0.08, rootMargin:'0px 0px -8% 0px' });
     sections.forEach((el,i)=>{ el.classList.add('reveal'); el.style.transitionDelay=(Math.min(i,4)*0.05)+'s'; io.observe(el); });
     setTimeout(()=>sections.forEach(el=>el.classList.add('in')), 2500); // failsafe
+  }
+
+  /* 3. Уборка заставки после анимации */
+  setTimeout(()=>{ const el=document.getElementById('introSplash'); if(el) el.remove(); }, 2100);
+
+  /* 4. «Набегающие» цифры цен — разово при первой загрузке */
+  function countUp(){
+    document.querySelectorAll('#dashGrid .asset-price').forEach(el=>{
+      const orig = el.textContent.trim();
+      const num = parseFloat(orig.replace(/[^0-9.]/g,''));
+      if(!isFinite(num)) return;
+      const hasComma = orig.indexOf(',') > -1;
+      const decimals = (orig.split('.')[1] || '').length;
+      const dur = 950, start = performance.now();
+      const fmt = v => {
+        let s = v.toFixed(decimals);
+        if(hasComma){ const p = s.split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ','); s = p.join('.'); }
+        return s;
+      };
+      (function step(now){
+        const p = Math.min(1, (now-start)/dur), e = 1-Math.pow(1-p,3);
+        el.textContent = fmt(num*e);
+        if(p<1) requestAnimationFrame(step); else el.textContent = orig; // гарантируем точное значение
+      })(start);
+      setTimeout(()=>{ el.textContent = orig; }, dur + 500); // страховка: точное значение при любом раскладе
+    });
+  }
+  if(!reduce){
+    const splash = document.getElementById('introSplash');
+    const delay = (splash && getComputedStyle(splash).display !== 'none') ? 1250 : 150;
+    setTimeout(countUp, delay);
   }
 })();
 </script>
