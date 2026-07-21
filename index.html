@@ -60,8 +60,20 @@
 
   main{ padding:36px 40px 80px; max-width:1180px; }
 
-  .hero{ display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-bottom:30px; border-bottom:1px solid var(--line); margin-bottom:36px; opacity:0; animation:rise 0.6s ease forwards; }
+  .hero{ display:flex; justify-content:space-between; align-items:flex-end; gap:40px; padding-bottom:30px; border-bottom:1px solid var(--line); margin-bottom:36px; opacity:0; animation:rise 0.6s ease forwards; position:relative; overflow:hidden; }
   @keyframes rise{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  #heroBg{ position:absolute; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; opacity:0.6;
+           -webkit-mask-image:linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+           mask-image:linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); }
+  .hero > div{ position:relative; z-index:1; }
+  .hero h1{ background:linear-gradient(100deg, var(--text) 0%, var(--text) 42%, #7FC4FF 54%, var(--green) 68%, var(--text) 82%);
+            background-size:220% auto; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+            animation:heroShimmer 7.5s linear infinite; }
+  @keyframes heroShimmer{ from{ background-position:200% center; } to{ background-position:0% center; } }
+
+  .reveal{ opacity:0; transform:translateY(26px); transition:opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1); }
+  .reveal.in{ opacity:1; transform:none; }
+  @media (prefers-reduced-motion:reduce){ .hero h1{ animation:none; } .reveal{ opacity:1 !important; transform:none !important; } }
   .hero h1{ font-family:var(--disp); font-size:clamp(26px, 3vw, 34px); font-weight:600; line-height:1.15; max-width:520px; }
   .hero p{ color:var(--text-dim); font-size:14px; margin-top:12px; max-width:460px; }
   .hero-stamp{ font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:right; white-space:nowrap; }
@@ -191,6 +203,7 @@
 
   <main>
     <div class="hero">
+      <canvas id="heroBg" aria-hidden="true"></canvas>
       <div>
         <h1>Рынок производит шум каждую минуту.<br>Сигнал — не каждую.</h1>
         <p>Лента новостей с официальных источников и аналитика по крипте, форексу и товарам — в одном месте, без вкладок и без домыслов.</p>
@@ -520,6 +533,74 @@
     priceChart.data.datasets[0].data = genSeries(idx * 1.7);
     priceChart.update();
   });
+</script>
+
+<script>
+/* ===== Визуальные усиления (аддитивно, не трогает логику данных) ===== */
+(function(){
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  /* 1. Живой анимированный фон hero — «поток рыночных данных» */
+  const canvas = document.getElementById('heroBg');
+  if(canvas && canvas.getContext){
+    const ctx = canvas.getContext('2d');
+    const hero = canvas.parentElement;
+    let W=0, H=0, t=0, dpr=Math.min(window.devicePixelRatio||1, 2);
+
+    function resize(){
+      const r = hero.getBoundingClientRect();
+      W = r.width; H = r.height;
+      canvas.width = Math.max(1, Math.round(W*dpr));
+      canvas.height = Math.max(1, Math.round(H*dpr));
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    const layers = [
+      { amp:24, len:0.9, spd:0.6,  col:'#5B9BD8', base:0.60, glow:16 },
+      { amp:17, len:1.5, spd:-0.9, col:'#3FCB82', base:0.74, glow:12 },
+    ];
+    function waveY(x, L){
+      return L.amp*Math.sin(x*0.006*L.len + t*0.02*L.spd)
+           + L.amp*0.45*Math.sin(x*0.013*L.len - t*0.03*L.spd);
+    }
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      // скользящая вертикальная сетка
+      ctx.globalAlpha = 0.5; ctx.strokeStyle = 'rgba(35,42,52,0.6)'; ctx.lineWidth = 1;
+      const step = 46, off = (t*0.35) % step;
+      for(let x=-off; x<W; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      layers.forEach(L=>{
+        const baseY = H*L.base;
+        ctx.beginPath(); ctx.moveTo(0, baseY + waveY(0,L));
+        for(let x=0; x<=W; x+=6){ ctx.lineTo(x, baseY + waveY(x,L)); }
+        ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+        const g = ctx.createLinearGradient(0, baseY-40, 0, H);
+        g.addColorStop(0, L.col+'30'); g.addColorStop(1, L.col+'00');
+        ctx.fillStyle = g; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(0, baseY + waveY(0,L));
+        for(let x=0; x<=W; x+=6){ ctx.lineTo(x, baseY + waveY(x,L)); }
+        ctx.strokeStyle = L.col; ctx.lineWidth = 1.8;
+        ctx.shadowColor = L.col; ctx.shadowBlur = L.glow; ctx.stroke(); ctx.shadowBlur = 0;
+      });
+      t += 1;
+      if(!reduce) requestAnimationFrame(draw);
+    }
+    draw();
+  }
+
+  /* 2. Плавное появление секций при скролле */
+  const sections = document.querySelectorAll('main > section');
+  if('IntersectionObserver' in window && !reduce){
+    const io = new IntersectionObserver((entries)=>{
+      entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold:0.08, rootMargin:'0px 0px -8% 0px' });
+    sections.forEach((el,i)=>{ el.classList.add('reveal'); el.style.transitionDelay=(Math.min(i,4)*0.05)+'s'; io.observe(el); });
+    setTimeout(()=>sections.forEach(el=>el.classList.add('in')), 2500); // failsafe
+  }
+})();
 </script>
 
 </body>
