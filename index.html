@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
     --bg: #0B0E13;
@@ -143,11 +142,29 @@
   .card-footer{ margin-top:13px; padding-top:11px; border-top:1px solid var(--line); display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--text-dim); }
   .card-footer b{ color:var(--text); }
 
+  .verdict-disclaimer{ margin-top:8px; font-size:9.5px; color:var(--text-dim); line-height:1.4; opacity:0.85; }
+  .verdict-why{ margin-top:9px; }
+  .verdict-why summary{ font-family:var(--mono); font-size:10px; color:var(--blue); cursor:pointer; list-style:none; user-select:none; }
+  .verdict-why summary::-webkit-details-marker{ display:none; }
+  .verdict-why summary::before{ content:'▸ '; }
+  .verdict-why[open] summary::before{ content:'▾ '; }
+  .verdict-why-body{ margin-top:8px; padding:10px; background:var(--panel-raised); border:1px solid var(--line); border-radius:4px; font-size:11.5px; color:var(--text-dim); line-height:1.5; }
+  .verdict-why-body .indic-row{ display:flex; gap:10px; flex-wrap:wrap; font-family:var(--mono); font-size:10px; margin-top:6px; }
+  .verdict-why-news{ margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+  .verdict-why-news a{ color:var(--blue); text-decoration:none; }
+  .verdict-live-tag{ font-family:var(--mono); font-size:8.5px; color:var(--text-dim); margin-left:6px; }
+
+  .sparkline{ display:block; margin-top:10px; }
+
   .chart-panel{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:20px; }
   .chart-tabs{ display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
   .chart-tab{ background:none; border:1px solid var(--line); color:var(--text-dim); font-family:var(--mono); font-size:11px; padding:6px 12px; border-radius:4px; }
   .chart-tab.active{ border-color:var(--blue-dim); color:var(--blue); background:rgba(91,155,216,0.08); }
+  .tf-tabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .tf-tab{ background:none; border:1px solid var(--line); color:var(--text-dim); font-family:var(--mono); font-size:10.5px; padding:5px 10px; border-radius:4px; }
+  .tf-tab.active{ border-color:var(--blue-dim); color:var(--blue); background:rgba(91,155,216,0.08); }
   .chart-canvas-wrap{ height:280px; }
+  .tradingview-widget-container, .tradingview-widget-container__widget{ height:100%; width:100%; }
 
   .news-list{ display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:6px; overflow:hidden; }
   .news-item{ background:var(--panel); padding:16px 18px; display:grid; grid-template-columns:100px 1fr auto; gap:18px; align-items:start; transition:background 0.15s; }
@@ -183,7 +200,7 @@
   .hidden{ display:none !important; }
 
   @media (max-width: 860px){
-    .shell{ grid-template-columns:1fr; }
+    .shell{ grid-template-columns:minmax(0,1fr); }
     .sidebar{ position:relative; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; padding:16px 20px; }
     .filters{ flex-direction:row; flex-wrap:wrap; }
     .pulse-box{ margin-top:0; border-top:none; padding-top:0; margin-left:auto; }
@@ -193,6 +210,26 @@
     .news-item{ grid-template-columns:1fr; gap:8px; }
     .news-tags{ justify-content:flex-start; }
     .cal-table, .corr-table{ display:block; overflow-x:auto; white-space:nowrap; }
+  }
+
+  @media (max-width: 480px){
+    .sidebar{ flex-direction:column; align-items:stretch; gap:18px; padding:14px 16px; }
+    .filters{ flex-direction:column; }
+    .filter-btn{ padding:11px 12px; }
+    .star-btn{ padding:6px; margin:-6px; }
+    .pulse-box{ margin-left:0; margin-top:0; }
+    .hero{ padding-bottom:20px; margin-bottom:26px; }
+    .hero-stamp{ white-space:normal; }
+    main{ padding:18px 14px 50px; }
+    footer{ padding:22px 14px 50px; }
+    .ticker-wrap{ height:34px; }
+    .tick{ font-size:11.5px; padding:0 14px; }
+    .dash-grid{ grid-template-columns:1fr; }
+    .asset-card{ padding:14px; }
+    .chart-panel{ padding:14px; }
+    .chart-canvas-wrap{ height:220px; }
+    .chart-tab{ padding:7px 10px; }
+    .news-item{ padding:14px; }
   }
 </style>
 </head>
@@ -254,16 +291,22 @@
     <section id="dashboard">
       <div class="section-head">
         <h2>Аналитика по активам</h2>
-        <span class="meta">5 инструментов · обновление раз в минуту</span>
+        <span class="meta" id="instrumentCount">5 инструментов · обновление раз в минуту</span>
       </div>
       <div class="dash-grid" id="dashGrid"></div>
     </section>
 
     <section id="chartSection">
-      <div class="section-head"><h2>График</h2><span class="meta">таймфрейм: 4Ч</span></div>
+      <div class="section-head"><h2>График</h2><span class="meta">TradingView, реальные котировки</span></div>
       <div class="chart-panel">
         <div class="chart-tabs" id="chartTabs"></div>
-        <div class="chart-canvas-wrap"><canvas id="priceChart"></canvas></div>
+        <div class="tf-tabs" id="tfTabs">
+          <button class="tf-tab" data-interval="5">5м</button>
+          <button class="tf-tab" data-interval="60">1ч</button>
+          <button class="tf-tab active" data-interval="240">4ч</button>
+          <button class="tf-tab" data-interval="D">1д</button>
+        </div>
+        <div class="chart-canvas-wrap" id="tvChartWrap"></div>
       </div>
     </section>
 
@@ -292,12 +335,14 @@
 </footer>
 
 <script>
-  const assets = [
-    { id:'btc', name:'BTC/USD', class:'crypto', classLabel:'КРИПТА', price:'64,180', change:'+1.8%', up:true, verdict:'wait', verdictLabel:'НЕ ВХОДИТЬ', conf:42, trend:38, newsScore:55, volume:33, factors:['RSI нейтрален','Приток в ETF','Слабый объём'], accuracy:58, live:false, liveSource:'CoinGecko' },
-    { id:'eth', name:'ETH/USD', class:'crypto', classLabel:'КРИПТА', price:'3,412', change:'-0.6%', up:false, verdict:'wait', verdictLabel:'НЕ ВХОДИТЬ', conf:38, trend:30, newsScore:40, volume:44, factors:['Боковик 3 дня','Газ на минимумах'], accuracy:52, live:false, liveSource:'CoinGecko' },
-    { id:'xau', name:'XAU/USD (Золото)', class:'commodity', classLabel:'ТОВАРЫ', price:'3,946', change:'-1.2%', up:false, verdict:'sell', verdictLabel:'SELL', conf:61, trend:66, newsScore:70, volume:48, factors:['Рост доходности UST','Крепкий доллар','Пробой поддержки'], accuracy:64, live:false, liveSource:null },
-    { id:'wti', name:'WTI (Нефть)', class:'commodity', classLabel:'ТОВАРЫ', price:'68.40', change:'+0.4%', up:true, verdict:'wait', verdictLabel:'НЕ ВХОДИТЬ', conf:35, trend:28, newsScore:38, volume:39, factors:['Запасы выше прогноза'], accuracy:47, live:false, liveSource:null },
-    { id:'usdrub', name:'USD/RUB', class:'forex', classLabel:'ФОРЕКС', price:'79.62', change:'+0.3%', up:true, verdict:'buy', verdictLabel:'BUY', conf:57, trend:60, newsScore:52, volume:59, factors:['Жёсткая риторика ЦБ РФ','Сезонный спрос на валюту'], accuracy:61, live:false, liveSource:'open.er-api.com' },
+  // BTC/ETH ниже — стартовые демо-заглушки; сразу после загрузки страницы fetchCryptoList()
+  // заменит их (и добавит ещё 8 монет) реальным топ-10 по капитализации с сервера.
+  let assets = [
+    { id:'bitcoin', symbol:'btc', name:'BTC/USD', class:'crypto', classLabel:'КРИПТА', price:'64,180', change:'+1.8%', up:true, verdict:'wait', verdictLabel:'НЕ ВХОДИТЬ', conf:42, trend:38, newsScore:55, volume:33, factors:['RSI нейтрален','Приток в ETF','Слабый объём'], accuracy:58, live:false, liveSource:'CoinGecko', tvSymbol:'BINANCE:BTCUSDT', verdictLive:false },
+    { id:'ethereum', symbol:'eth', name:'ETH/USD', class:'crypto', classLabel:'КРИПТА', price:'3,412', change:'-0.6%', up:false, verdict:'wait', verdictLabel:'НЕ ВХОДИТЬ', conf:38, trend:30, newsScore:40, volume:44, factors:['Боковик 3 дня','Газ на минимумах'], accuracy:52, live:false, liveSource:'CoinGecko', tvSymbol:'BINANCE:ETHUSDT', verdictLive:false },
+    { id:'xau', name:'XAU/USD (Золото)', class:'commodity', classLabel:'ТОВАРЫ', price:'3,946', change:'-1.2%', up:false, verdict:'sell', verdictLabel:'SELL', conf:61, trend:66, newsScore:70, volume:48, factors:['Рост доходности UST','Крепкий доллар','Пробой поддержки'], accuracy:64, live:false, liveSource:null, tvSymbol:'TVC:GOLD', verdictLive:false },
+    { id:'wti', name:'WTI (Нефть)', class:'commodity', classLabel:'ТОВАРЫ', price:'68.40', change:'+0.4%', up:true, verdict:'wait', verdictLabel:'НЕ ВХОДИТЬ', conf:35, trend:28, newsScore:38, volume:39, factors:['Запасы выше прогноза'], accuracy:47, live:false, liveSource:null, tvSymbol:'TVC:USOIL', verdictLive:false },
+    { id:'usdrub', name:'USD/RUB', class:'forex', classLabel:'ФОРЕКС', price:'79.62', change:'+0.3%', up:true, verdict:'buy', verdictLabel:'BUY', conf:57, trend:60, newsScore:52, volume:59, factors:['Жёсткая риторика ЦБ РФ','Сезонный спрос на валюту'], accuracy:61, live:false, liveSource:'open.er-api.com', tvSymbol:'FX_IDC:USDRUB', verdictLive:false },
   ];
 
   let news = [
@@ -316,7 +361,9 @@
     { time:'Послезавтра 12:00', event:'Решение ЕЦБ по ставке', ccy:'EUR', imp:'high', fc:'3.75%', prev:'3.75%' },
   ];
 
-  const corrLabels = assets.map(a => a.name.split(' ')[0]);
+  // Таблица корреляций — фиксированный демо-макет по исходным 5 активам (см. дисклеймер
+  // в подвале), сознательно не завязан на динамический список активов ниже.
+  const corrLabels = ['BTC', 'ETH', 'XAU', 'WTI', 'USD/RUB'];
   const corrMatrix = [
     [1.00, 0.82, -0.31, 0.12, -0.18],
     [0.82, 1.00, -0.24, 0.09, -0.15],
@@ -363,23 +410,48 @@
               <div class="asset-class">${a.classLabel}<span class="data-badge ${a.live?'live':'demo'}">${a.live?'LIVE':'DEMO'}</span></div>
             </div>
           </div>
-          <div class="verdict ${a.verdict}">${a.verdictLabel}</div>
+          <div class="verdict ${a.verdict}">${a.verdictLabel}<span class="verdict-live-tag">${a.verdictLive?'LIVE':'DEMO'}</span></div>
         </div>
         <div class="asset-price">${a.price}</div>
         <div class="asset-change" style="color:${a.up?'var(--green)':'var(--red)'}">${a.change} за 24ч</div>
 
+        ${a.sparkline && a.sparkline.length > 1 ? renderSparkline(a.sparkline, a.up) : ''}
+
         <div class="factors">${a.factors.map(f => `<span class="factor-chip">${f}</span>`).join('')}</div>
 
+        ${a.verdictLive ? '' : `
         <div class="conf-breakdown">
           <div class="conf-row"><span class="conf-row-label">ТРЕНД</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.trend}%"></div></div><span class="conf-row-val">${a.trend}%</span></div>
           <div class="conf-row"><span class="conf-row-label">НОВОСТИ</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.newsScore}%"></div></div><span class="conf-row-val">${a.newsScore}%</span></div>
           <div class="conf-row"><span class="conf-row-label">ОБЪЁМ</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.volume}%"></div></div><span class="conf-row-val">${a.volume}%</span></div>
-        </div>
+        </div>`}
 
         <div class="card-footer">
           <span>Итог. уверенность: <b>${a.conf}%</b></span>
-          <span>Точность 30д: <b>${a.accuracy}%</b></span>
+          ${a.verdictLive
+            ? `<span>Посчитано: <b>${timeAgo(a.verdictComputedAt)}</b></span>`
+            : `<span>Точность 30д: <b>${a.accuracy}%</b></span>`}
         </div>
+
+        <div class="verdict-disclaimer">Аналитическое мнение на основе ${a.verdictLive ? 'технических индикаторов' : 'демо-данных'}, не индивидуальная инвестиционная рекомендация.</div>
+
+        ${a.verdictLive && a.indicators ? `
+        <details class="verdict-why">
+          <summary>Почему?</summary>
+          <div class="verdict-why-body">
+            <div class="indic-row">
+              <span>RSI(14): ${a.indicators.rsi != null ? a.indicators.rsi.toFixed(1) : '—'}</span>
+              <span>EMA50: ${a.indicators.ema50 != null ? fmtPrice(a.indicators.ema50, 2) : '—'}</span>
+              <span>EMA200: ${a.indicators.ema200 != null ? fmtPrice(a.indicators.ema200, 2) : '—'}</span>
+              <span>Поддержка: ${a.indicators.support != null ? fmtPrice(a.indicators.support, 2) : '—'}</span>
+              <span>Сопротивление: ${a.indicators.resistance != null ? fmtPrice(a.indicators.resistance, 2) : '—'}</span>
+            </div>
+            ${a.relatedNews && a.relatedNews.length ? `
+            <div class="verdict-why-news">
+              Связанные новости: ${a.relatedNews.map(n => `«${n.title}» (${n.src})`).join('; ')}
+            </div>` : ''}
+          </div>
+        </details>` : ''}
       </div>
     `).join('');
   }
@@ -432,31 +504,61 @@
     return n.toLocaleString('en-US', { minimumFractionDigits:decimals, maximumFractionDigits:decimals });
   }
 
+  // Сколько знаков после запятой показывать для цены криптоактива — у дешёвых альткоинов
+  // (доли цента) 0-2 знака дадут "0.00", поэтому шкала на трёх порогах.
+  function cryptoDecimals(price){
+    if(price >= 100) return 0;
+    if(price >= 1) return 2;
+    return 6;
+  }
+
+  function renderSparkline(points, up){
+    const w = 220, h = 34, pad = 2;
+    const min = Math.min(...points), max = Math.max(...points);
+    const range = (max - min) || 1;
+    const step = (w - pad * 2) / (points.length - 1);
+    const path = points.map((p, i) => {
+      const x = pad + i * step;
+      const y = pad + (1 - (p - min) / range) * (h - pad * 2);
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const color = up ? 'var(--green)' : 'var(--red)';
+    return `<svg class="sparkline" width="100%" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${path}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+  }
+
+  function timeAgo(iso){
+    if(!iso) return '—';
+    const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if(diffMin < 1) return 'только что';
+    if(diffMin < 60) return `${diffMin} мин назад`;
+    const diffH = Math.round(diffMin / 60);
+    if(diffH < 24) return `${diffH} ч назад`;
+    return `${Math.round(diffH / 24)} дн назад`;
+  }
+
   async function fetchLiveData(){
     const statusEl = document.getElementById('liveStatus');
     const stampEl = document.getElementById('liveTimestamp');
     let liveCount = 0;
 
-    // BTC & ETH — CoinGecko public API, no key required
-    try{
-      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true');
-      if(!res.ok) throw new Error('coingecko not ok');
-      const data = await res.json();
-      const btc = assets.find(a => a.id === 'btc');
-      const eth = assets.find(a => a.id === 'eth');
-      if(data.bitcoin){
-        btc.price = fmtPrice(data.bitcoin.usd, 0);
-        btc.up = data.bitcoin.usd_24h_change >= 0;
-        btc.change = (btc.up?'+':'') + data.bitcoin.usd_24h_change.toFixed(2) + '%';
-        btc.live = true; liveCount++;
-      }
-      if(data.ethereum){
-        eth.price = fmtPrice(data.ethereum.usd, 0);
-        eth.up = data.ethereum.usd_24h_change >= 0;
-        eth.change = (eth.up?'+':'') + data.ethereum.usd_24h_change.toFixed(2) + '%';
-        eth.live = true; liveCount++;
-      }
-    }catch(err){ console.warn('Крипто-котировки: не удалось получить живые данные, остаются демо', err); }
+    // Вся крипта (топ-10 + запасные BTC/ETH) — CoinGecko public API, без ключа, один батч-запрос
+    const cryptoAssets = assets.filter(a => a.class === 'crypto');
+    if(cryptoAssets.length){
+      try{
+        const ids = cryptoAssets.map(a => a.id).join(',');
+        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`);
+        if(!res.ok) throw new Error('coingecko not ok');
+        const data = await res.json();
+        cryptoAssets.forEach(a => {
+          const d = data[a.id];
+          if(!d) return;
+          a.price = fmtPrice(d.usd, cryptoDecimals(d.usd));
+          a.up = d.usd_24h_change >= 0;
+          a.change = (a.up?'+':'') + d.usd_24h_change.toFixed(2) + '%';
+          a.live = true; liveCount++;
+        });
+      }catch(err){ console.warn('Крипто-котировки: не удалось получить живые данные, остаются демо', err); }
+    }
 
     // USD/RUB — open.er-api.com, free, no key required
     try{
@@ -503,7 +605,7 @@
     const now = new Date();
     stampEl.textContent = now.toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' }).toUpperCase() + ' · ' + now.toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit' });
     if(liveCount > 0){
-      statusEl.textContent = `ЖИВЫЕ ДАННЫЕ (${liveCount}/5)`;
+      statusEl.textContent = `ЖИВЫЕ ДАННЫЕ (${liveCount}/${assets.length})`;
     } else {
       statusEl.textContent = 'ДЕМО-РЕЖИМ (источники недоступны)';
     }
@@ -527,10 +629,91 @@
     }catch(err){ console.warn('Новости: не удалось получить живую ленту, остаются демо-новости', err); }
   }
 
-  fetchLiveData();
-  fetchNews();
+  function updateFilterCounts(){
+    document.querySelectorAll('#filters .filter-btn').forEach(btn => {
+      const f = btn.dataset.filter;
+      if(f === 'watchlist') return; // считает saveWatchlist()
+      const countEl = btn.querySelector('.count');
+      if(!countEl) return;
+      countEl.textContent = f === 'all' ? assets.length : assets.filter(a => a.class === f).length;
+    });
+    const countEl = document.getElementById('instrumentCount');
+    if(countEl) countEl.textContent = `${assets.length} инструментов · обновление раз в минуту`;
+  }
+
+  // Топ-10 криптоактивов по капитализации (без стейблкоинов) — обновляется раз в сутки
+  // на сервере (crypto-list-refresh.js), сайт лишь читает готовый список.
+  async function fetchCryptoList(){
+    try{
+      const res = await fetch('/.netlify/functions/crypto-list');
+      if(!res.ok) throw new Error('crypto-list function not ok');
+      const data = await res.json();
+      if(!data.coins || !data.coins.length) return; // список ещё не посчитан — остаёмся на BTC/ETH-заглушках
+
+      const nonCrypto = assets.filter(a => a.class !== 'crypto');
+      const cryptoAssets = data.coins.map(c => ({
+        id: c.id,
+        symbol: c.symbol,
+        name: `${c.symbol.toUpperCase()}/USD`,
+        class: 'crypto',
+        classLabel: 'КРИПТА',
+        price: fmtPrice(c.price, cryptoDecimals(c.price)),
+        change: (c.change24h >= 0 ? '+' : '') + (c.change24h ?? 0).toFixed(2) + '%',
+        up: c.change24h >= 0,
+        verdict: 'wait', verdictLabel: 'НЕ ВХОДИТЬ', conf: 30,
+        trend: 30, newsScore: 30, volume: 30, factors: ['Ждём расчёта вердикта'], accuracy: 0,
+        live: true, liveSource: 'CoinGecko', verdictLive: false,
+        tvSymbol: c.tvSymbol, sparkline: c.sparkline || [],
+      }));
+
+      assets = [...nonCrypto, ...cryptoAssets];
+      // избранное могло указывать на старые демо-id ('bitcoin'/'ethereum' сохраняются, остальные — нет)
+      watchlist = watchlist.filter(id => assets.some(a => a.id === id));
+      saveWatchlist();
+
+      buildTicker();
+      buildChartTabs();
+      updateFilterCounts();
+      renderDash(currentFilter);
+      renderNews(currentFilter);
+    }catch(err){ console.warn('Крипто-топ-10: не удалось получить список, остаёмся на BTC/ETH', err); }
+  }
+
+  // Вердикты, посчитанные indicators-refresh.js (RSI/EMA/уровни) — раз в 6 часов.
+  async function fetchVerdicts(){
+    try{
+      const res = await fetch('/.netlify/functions/verdicts');
+      if(!res.ok) throw new Error('verdicts function not ok');
+      const data = await res.json();
+      let any = false;
+      assets.forEach(a => {
+        const v = data[a.id];
+        if(!v) { a.verdictLive = false; return; }
+        any = true;
+        a.verdict = v.verdict;
+        a.verdictLabel = v.verdictLabel;
+        a.conf = v.confidence;
+        a.factors = v.factors && v.factors.length ? v.factors : ['Недостаточно данных для факторов'];
+        a.indicators = v.indicators;
+        a.relatedNews = v.relatedNews;
+        a.verdictComputedAt = v.computedAt;
+        a.verdictLive = true;
+      });
+      if(any) renderDash(currentFilter);
+    }catch(err){ console.warn('Вердикты: не удалось получить живые данные, остаются демо', err); }
+  }
+
+  (async function initialLoad(){
+    await fetchCryptoList(); // сначала список активов, чтобы дальнейшие запросы знали актуальные id
+    fetchLiveData();
+    fetchNews();
+    fetchVerdicts();
+  })();
+
   setInterval(fetchLiveData, 60000); // обновление котировок раз в минуту
   setInterval(fetchNews, 300000); // обновление новостей раз в 5 минут
+  setInterval(fetchCryptoList, 3600000); // список топ-10 обновляется на сервере раз в сутки, здесь просто перечитываем раз в час
+  setInterval(fetchVerdicts, 600000); // вердикты обновляются на сервере раз в 6 часов, здесь перечитываем раз в 10 минут
 
   document.getElementById('filters').addEventListener('click', e => {
     const btn = e.target.closest('.filter-btn');
@@ -545,34 +728,69 @@
   saveWatchlist();
 
   const chartTabs = document.getElementById('chartTabs');
-  chartTabs.innerHTML = assets.map((a,i) => `<button class="chart-tab ${i===0?'active':''}" data-id="${a.id}">${a.name}</button>`).join('');
+  const tfTabs = document.getElementById('tfTabs');
+  let currentChartAssetId = null;
+  let currentInterval = '240';
 
-  function genSeries(seed){
-    let v = 100, out = [];
-    for(let i=0;i<48;i++){ v += (Math.sin(i/5 + seed) * 2) + (Math.random()-0.5)*1.5; out.push(v); }
-    return out;
+  function buildChartTabs(){
+    if(!currentChartAssetId || !assets.some(a => a.id === currentChartAssetId)){
+      currentChartAssetId = assets[0] && assets[0].id;
+    }
+    chartTabs.innerHTML = assets.map(a => `<button class="chart-tab ${a.id===currentChartAssetId?'active':''}" data-id="${a.id}">${a.name}</button>`).join('');
+    mountTradingView();
   }
 
-  const ctx = document.getElementById('priceChart').getContext('2d');
-  let priceChart = new Chart(ctx, {
-    type:'line',
-    data:{ labels: Array.from({length:48}, (_,i) => `${i}ч`), datasets:[{ data: genSeries(0), borderColor:'#5B9BD8', borderWidth:1.6, pointRadius:0, tension:0.35, fill:true, backgroundColor:'rgba(91,155,216,0.06)' }] },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{ display:false } },
-      scales:{ x:{ display:false }, y:{ grid:{ color:'#1a1f27' }, ticks:{ color:'#8B93A1', font:{ family:'IBM Plex Mono', size:10 } } } }
-    }
-  });
+  // TradingView не даёт менять symbol/interval у уже смонтированного виджета —
+  // официально документированный способ (см. Dynamic Symbol Change tutorial) — пересоздать контейнер.
+  function mountTradingView(){
+    const asset = assets.find(a => a.id === currentChartAssetId);
+    const wrap = document.getElementById('tvChartWrap');
+    if(!asset || !asset.tvSymbol || !wrap) return;
+    wrap.innerHTML = '';
+    const container = document.createElement('div');
+    container.className = 'tradingview-widget-container';
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container__widget';
+    container.appendChild(widgetDiv);
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    script.async = true;
+    script.text = JSON.stringify({
+      autosize: true,
+      symbol: asset.tvSymbol,
+      interval: currentInterval,
+      timezone: 'Etc/UTC',
+      theme: 'dark',
+      style: '1',
+      locale: 'ru',
+      allow_symbol_change: false,
+      hide_side_toolbar: true,
+      support_host: 'https://www.tradingview.com',
+    });
+    container.appendChild(script);
+    wrap.appendChild(container);
+  }
 
   chartTabs.addEventListener('click', e => {
     const btn = e.target.closest('.chart-tab');
     if(!btn) return;
     document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const idx = assets.findIndex(a => a.id === btn.dataset.id);
-    priceChart.data.datasets[0].data = genSeries(idx * 1.7);
-    priceChart.update();
+    currentChartAssetId = btn.dataset.id;
+    mountTradingView();
   });
+
+  tfTabs.addEventListener('click', e => {
+    const btn = e.target.closest('.tf-tab');
+    if(!btn) return;
+    document.querySelectorAll('.tf-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentInterval = btn.dataset.interval;
+    mountTradingView();
+  });
+
+  buildChartTabs();
 </script>
 
 <script>
