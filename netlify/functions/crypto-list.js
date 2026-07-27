@@ -3,11 +3,12 @@
 // список на лету и кэширует, чтобы сайт показал топ-10 сразу, а не через сутки.
 // Кэшируется на CDN на час — список всё равно обновляется раз в сутки.
 
-const { getStore } = require('@netlify/blobs');
+const { connectLambda, getStore } = require('@netlify/blobs');
 const { fetchTop10 } = require('./lib/coingecko');
 
-exports.handler = async function () {
+exports.handler = async function (event) {
   try {
+    connectLambda(event); // подключить контекст Blobs из Lambda-события (обязательно для exports.handler-функций)
     const store = getStore('meridian-data');
     let data = await store.get('crypto-list', { type: 'json' });
 

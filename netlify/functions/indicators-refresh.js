@@ -8,7 +8,7 @@
 // дисклеймером "не инвестиционная рекомендация".
 
 const { schedule } = require('@netlify/functions');
-const { getStore } = require('@netlify/blobs');
+const { connectLambda, getStore } = require('@netlify/blobs');
 const { STATIC_ASSETS } = require('./lib/assets-registry');
 const { rsi, ema, supportResistance } = require('./lib/indicators');
 const { coinGeckoHeaders } = require('./lib/coingecko');
@@ -187,8 +187,9 @@ async function run() {
   return { statusCode: 200, body: JSON.stringify({ ok: true, computed: Object.keys(newVerdicts).length, errors }) };
 }
 
-exports.handler = schedule('0 */6 * * *', async () => {
+exports.handler = schedule('0 */6 * * *', async (event) => {
   try {
+    connectLambda(event); // подключить контекст Blobs из Lambda-события
     return await run();
   } catch (err) {
     console.error('indicators-refresh failed:', err);

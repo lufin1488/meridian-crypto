@@ -1,10 +1,11 @@
 // Отдаёт сайту вердикты, посчитанные indicators-refresh.js. Кэш на CDN короче, чем у
 // crypto-list, т.к. это более "живая" часть дашборда (хоть и обновляется раз в 6 часов).
 
-const { getStore } = require('@netlify/blobs');
+const { connectLambda, getStore } = require('@netlify/blobs');
 
-exports.handler = async function () {
+exports.handler = async function (event) {
   try {
+    connectLambda(event); // подключить контекст Blobs из Lambda-события (обязательно для exports.handler-функций)
     const store = getStore('meridian-data');
     const data = await store.get('verdicts', { type: 'json' });
 

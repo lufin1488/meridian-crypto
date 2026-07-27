@@ -2,7 +2,7 @@
 // Команды: /start (подписка), /stop (отписка), /settings (вкл/выкл второстепенных
 // уведомлений через инлайн-кнопки). Хранит подписчиков в Netlify Blobs.
 
-const { getStore } = require('@netlify/blobs');
+const { connectLambda, getStore } = require('@netlify/blobs');
 
 const DEFAULT_SETTINGS = { priceMoves: true, news: true, verdictDowngrade: true };
 
@@ -57,6 +57,7 @@ exports.handler = async function (event) {
   }
 
   try {
+    connectLambda(event); // подключить контекст Blobs из Lambda-события (обязательно для exports.handler-функций)
     const store = getStore('meridian-data');
     if (update.message && update.message.text) {
       const chatId = update.message.chat.id;

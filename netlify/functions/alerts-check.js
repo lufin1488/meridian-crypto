@@ -4,7 +4,7 @@
 // понижение до "НЕ ВХОДИТЬ" и резкие движения — только тем, кто включил это в /settings).
 
 const { schedule } = require('@netlify/functions');
-const { getStore } = require('@netlify/blobs');
+const { connectLambda, getStore } = require('@netlify/blobs');
 const { STATIC_ASSETS } = require('./lib/assets-registry');
 const { coinGeckoHeaders } = require('./lib/coingecko');
 
@@ -150,8 +150,9 @@ async function run() {
   return { statusCode: 200, body: JSON.stringify({ ok: true, spikes: spikes.length, notified: queue.length }) };
 }
 
-exports.handler = schedule('*/20 * * * *', async () => {
+exports.handler = schedule('*/20 * * * *', async (event) => {
   try {
+    connectLambda(event); // подключить контекст Blobs из Lambda-события
     return await run();
   } catch (err) {
     console.error('alerts-check failed:', err);

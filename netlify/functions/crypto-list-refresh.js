@@ -3,7 +3,7 @@
 // не дёргая CoinGecko напрямую из браузера каждого посетителя.
 
 const { schedule } = require('@netlify/functions');
-const { getStore } = require('@netlify/blobs');
+const { connectLambda, getStore } = require('@netlify/blobs');
 const { fetchTop10 } = require('./lib/coingecko');
 
 async function run() {
@@ -13,8 +13,9 @@ async function run() {
   return { statusCode: 200, body: JSON.stringify({ ok: true, count: list.coins.length }) };
 }
 
-exports.handler = schedule('@daily', async () => {
+exports.handler = schedule('@daily', async (event) => {
   try {
+    connectLambda(event); // подключить контекст Blobs из Lambda-события
     return await run();
   } catch (err) {
     console.error('crypto-list-refresh failed:', err);
