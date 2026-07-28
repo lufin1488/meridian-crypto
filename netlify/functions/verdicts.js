@@ -11,9 +11,12 @@ const { computeVerdicts, fetchNewsContext } = require('./lib/verdict-engine');
 
 const STALE_MS = 12 * 60 * 60 * 1000; // старше 12 ч считаем устаревшим
 
-function isSparseOrStale(verdicts, cryptoCount) {
+// Нужен ли ленивый пересчёт: есть недостающие крипто-вердикты, либо всё устарело.
+// (частоту ограничивает CDN-кэш ответа на 10 минут — см. Cache-Control ниже)
+function needsLazyCompute(verdicts, cryptoCoins) {
+  const missing = cryptoCoins.filter((c) => !verdicts[c.id]);
+  if (missing.length) return true;
   const ids = Object.keys(verdicts || {});
-  if (cryptoCount > 0 && ids.length < Math.ceil(cryptoCount * 0.6)) return true; // заполнено меньше 60%
   const newest = ids.map((id) => Date.parse(verdicts[id].computedAt || 0)).sort((a, b) => b - a)[0] || 0;
   return Date.now() - newest > STALE_MS;
 }
@@ -27,7 +30,7 @@ exports.handler = async function (event) {
     const cryptoListData = await store.get('crypto-list', { type: 'json' });
     const cryptoCoins = (cryptoListData && cryptoListData.coins) || [];
 
-    if (cryptoCoins.length && isSparseOrStale(data, cryptoCoins.length)) {
+    if (cryptoCoins.length && needsLazyCompute(data, cryptoCoins)) {
       const newsItems = await fetchNewsContext();
       // Считаем только недостающие монеты — меньше пакет, быстрее укладывается в лимит.
       const missing = cryptoCoins.filter((c) => !data[c.id]);
