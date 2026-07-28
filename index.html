@@ -269,12 +269,12 @@
       <div class="pulse-label">MARKET PULSE</div>
       <svg width="150" height="80" viewBox="0 0 150 80">
         <path d="M 10 70 A 65 65 0 0 1 140 70" fill="none" stroke="#232A34" stroke-width="10" stroke-linecap="round"/>
-        <path d="M 10 70 A 65 65 0 0 1 140 70" fill="none" stroke="#5B9BD8" stroke-width="10" stroke-linecap="round" stroke-dasharray="204" stroke-dashoffset="132"/>
-        <line x1="75" y1="70" x2="75" y2="20" stroke="#E7EAF0" stroke-width="2" transform="rotate(-25 75 70)"/>
+        <path id="pulseArc" d="M 10 70 A 65 65 0 0 1 140 70" fill="none" stroke="#5B9BD8" stroke-width="10" stroke-linecap="round" stroke-dasharray="204" stroke-dashoffset="132" style="transition:stroke-dashoffset .6s ease, stroke .6s ease"/>
+        <line id="pulseNeedle" x1="75" y1="70" x2="75" y2="20" stroke="#E7EAF0" stroke-width="2" transform="rotate(0 75 70)" style="transition:transform .6s ease"/>
         <circle cx="75" cy="70" r="4" fill="#E7EAF0"/>
       </svg>
-      <div class="pulse-value">Осторожный риск-офф</div>
-      <div class="pulse-sub">4 из 5 активов: НЕ ВХОДИТЬ</div>
+      <div class="pulse-value" id="pulseValue">Ждём расчёта</div>
+      <div class="pulse-sub" id="pulseSub">вердикты считаются на сервере</div>
     </div>
   </aside>
 
@@ -454,6 +454,50 @@
         </details>` : ''}
       </div>
     `).join('');
+    updateMarketPulse();
+  }
+
+  // Индикатор настроения рынка считается из реальных вердиктов по всем активам:
+  // перевес BUY → риск-он, перевес SELL → риск-офф.
+  function updateMarketPulse(){
+    const arc = document.getElementById('pulseArc');
+    const needle = document.getElementById('pulseNeedle');
+    const valEl = document.getElementById('pulseValue');
+    const subEl = document.getElementById('pulseSub');
+    if(!arc || !needle || !valEl || !subEl) return;
+
+    const live = assets.filter(a => a.verdictLive);
+    if(!live.length){
+      valEl.textContent = 'Ждём расчёта';
+      subEl.textContent = 'вердикты считаются на сервере';
+      needle.setAttribute('transform', 'rotate(0 75 70)');
+      arc.setAttribute('stroke-dashoffset', 102);
+      arc.style.stroke = 'var(--blue)';
+      return;
+    }
+
+    const buy = live.filter(a => a.verdict === 'buy').length;
+    const sell = live.filter(a => a.verdict === 'sell').length;
+    const wait = live.filter(a => a.verdict === 'wait').length;
+    const total = live.length;
+    const score = (buy - sell) / total; // -1 (всё SELL) .. +1 (всё BUY)
+
+    needle.setAttribute('transform', `rotate(${Math.round(score * 80)} 75 70)`);
+    const ARC_LEN = 204;
+    arc.setAttribute('stroke-dashoffset', Math.round(ARC_LEN * (1 - (score + 1) / 2)));
+    arc.style.stroke = score > 0.15 ? 'var(--green)' : score < -0.15 ? 'var(--red)' : 'var(--blue)';
+
+    valEl.textContent =
+      score > 0.3 ? 'Риск-он' :
+      score > 0.1 ? 'Умеренный оптимизм' :
+      score >= -0.1 ? 'Нейтрально' :
+      score >= -0.3 ? 'Осторожность' : 'Риск-офф';
+
+    const parts = [];
+    if(sell) parts.push(`${sell} SELL`);
+    if(buy) parts.push(`${buy} BUY`);
+    if(wait) parts.push(`${wait} ждут`);
+    subEl.textContent = `${total} ${total === 1 ? 'актив' : 'активов'}: ` + parts.join(' · ');
   }
   renderDash('all');
 
