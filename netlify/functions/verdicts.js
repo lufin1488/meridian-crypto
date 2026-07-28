@@ -40,8 +40,10 @@ exports.handler = async function (event) {
         new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
       ]);
       if (computed && Object.keys(computed).length) {
-        // сохраняем поверх, не затирая уже посчитанные Twelve Data-активы
-        data = { ...data, ...computed };
+        // перечитываем свежий блоб прямо перед записью и сливаемся в него — чтобы
+        // параллельные on-demand пересчёты накапливались, а не затирали друг друга.
+        const latest = (await store.get('verdicts', { type: 'json' })) || {};
+        data = { ...latest, ...data, ...computed };
         await store.setJSON('verdicts', data);
       }
     }
