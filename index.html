@@ -40,7 +40,7 @@
   .tick .up{ color:var(--green); }
   .tick .down{ color:var(--red); }
 
-  .shell{ display:grid; grid-template-columns:230px 1fr; min-height:100vh; }
+  .shell{ display:grid; grid-template-columns:230px minmax(0,1fr); min-height:100vh; }
   .sidebar{ background:var(--panel); border-right:1px solid var(--line); padding:26px 20px; display:flex; flex-direction:column; gap:34px; position:sticky; top:0; height:100vh; overflow-y:auto; }
   .brand{ font-family:var(--disp); font-size:19px; font-weight:700; letter-spacing:0.02em; }
   .brand span{ color:var(--blue); }
@@ -100,7 +100,7 @@
   @media (prefers-reduced-motion:reduce){ .data-badge.live::before, .verdict.buy, .verdict.sell{ animation:none; } #introSplash{ display:none !important; } }
   .hero h1{ font-family:var(--disp); font-size:clamp(26px, 3vw, 34px); font-weight:600; line-height:1.15; max-width:520px; }
   .hero p{ color:var(--text-dim); font-size:14px; margin-top:12px; max-width:460px; }
-  .hero-stamp{ font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:right; white-space:nowrap; }
+  .hero-stamp{ font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:right; }
   .hero-stamp b{ color:var(--blue); display:block; font-size:12px; margin-bottom:4px;}
 
   .section-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; flex-wrap:wrap; gap:8px; }
