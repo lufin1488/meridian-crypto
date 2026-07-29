@@ -1,21 +1,20 @@
 // Отдаёт сайту вердикты, посчитанные indicators-refresh.js (планировщик, раз в 6 часов).
 //
-// Ленивый пересчёт: если вердиктов по крипте заметно меньше, чем монет в топ-10 (первый
-// деплой / планировщик ещё не отработал новый код), считает крипту на лету и кэширует.
-// В штатном режиме (планировщик заполнил вердикты) этот путь не срабатывает. Twelve Data-
-// активы (золото/нефть/USD-RUB) тут не считаются — они появятся при плановом прогоне,
-// чтобы on-demand запрос гарантированно уложился в таймаут функции.
+// Ленивый пересчёт: если каких-то вердиктов не хватает (первый деплой / планировщик ещё
+// не отработал), считает недостающее на лету и кэширует. В штатном режиме (планировщик
+// всё заполнил) этот путь не срабатывает и внешние API не дёргаются.
 
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { computeVerdicts, fetchNewsContext } = require('./lib/verdict-engine');
+const { STATIC_ASSETS } = require('./lib/assets-registry');
 
 const STALE_MS = 12 * 60 * 60 * 1000; // старше 12 ч считаем устаревшим
 
-// Нужен ли ленивый пересчёт: есть недостающие крипто-вердикты, либо всё устарело.
-// (частоту ограничивает CDN-кэш ответа на 10 минут — см. Cache-Control ниже)
+// Нужен ли ленивый пересчёт: есть недостающие вердикты (крипта или золото/нефть/USD-RUB),
+// либо всё устарело. Частоту ограничивает CDN-кэш ответа на 10 минут (см. Cache-Control).
 function needsLazyCompute(verdicts, cryptoCoins) {
-  const missing = cryptoCoins.filter((c) => !verdicts[c.id]);
-  if (missing.length) return true;
+  if (cryptoCoins.some((c) => !verdicts[c.id])) return true;
+  if (STATIC_ASSETS.some((a) => !verdicts[a.id])) return true;
   const ids = Object.keys(verdicts || {});
   const newest = ids.map((id) => Date.parse(verdicts[id].computedAt || 0)).sort((a, b) => b - a)[0] || 0;
   return Date.now() - newest > STALE_MS;
@@ -30,16 +29,24 @@ exports.handler = async function (event) {
     const cryptoListData = await store.get('crypto-list', { type: 'json' });
     const cryptoCoins = (cryptoListData && cryptoListData.coins) || [];
 
-    if (cryptoCoins.length && needsLazyCompute(data, cryptoCoins)) {
+    if (needsLazyCompute(data, cryptoCoins)) {
       const newsItems = await fetchNewsContext();
-      // Считаем только недостающие монеты — меньше пакет, быстрее укладывается в лимит.
-      const missing = cryptoCoins.filter((c) => !data[c.id]);
-      const toCompute = missing.length ? missing : cryptoCoins;
+      const missingCoins = cryptoCoins.filter((c) => !data[c.id]);
+      // Золото/нефть/USD-RUB добираем, только если их ещё нет (3 быстрых запроса).
+      const needStatic = STATIC_ASSETS.some((a) => !data[a.id]);
+
+      // Что именно считаем: недостающие монеты; если недостающих нет, но чего-то нет из
+      // статичных — только их; иначе (сработала проверка на устаревание) пересчитываем всё.
+      let coinsToCompute;
+      if (missingCoins.length) coinsToCompute = missingCoins;
+      else if (needStatic) coinsToCompute = [];
+      else coinsToCompute = cryptoCoins;
+
       // Защита от таймаута on-demand функции (~10с): если публичный CoinGecko без ключа
       // тормозит и пересчёт не уложился в 8с — просто возвращаем что есть, ничего не теряя.
-      // Пересчёт аддитивный, так что повторные запросы постепенно доберут все монеты.
+      // Пересчёт аддитивный, так что повторные запросы постепенно доберут остальное.
       const computed = await Promise.race([
-        computeVerdicts(toCompute, newsItems, { includeStatic: false }).then((r) => r.verdicts),
+        computeVerdicts(coinsToCompute, newsItems, { includeStatic: needStatic }).then((r) => r.verdicts),
         new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
       ]);
       if (computed && Object.keys(computed).length) {
