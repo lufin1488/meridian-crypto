@@ -419,7 +419,12 @@
 
         <div class="factors">${a.factors.map(f => `<span class="factor-chip">${f}</span>`).join('')}</div>
 
-        ${a.verdictLive ? '' : `
+        ${a.verdictLive && a.scores ? `
+        <div class="conf-breakdown">
+          <div class="conf-row"><span class="conf-row-label">ТРЕНД</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.scores.trend}%"></div></div><span class="conf-row-val">${a.scores.trend}%</span></div>
+          <div class="conf-row"><span class="conf-row-label">RSI</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.scores.rsi}%"></div></div><span class="conf-row-val">${a.scores.rsi}%</span></div>
+          <div class="conf-row"><span class="conf-row-label">УРОВНИ</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.scores.levels}%"></div></div><span class="conf-row-val">${a.scores.levels}%</span></div>
+        </div>` : a.verdictLive ? '' : `
         <div class="conf-breakdown">
           <div class="conf-row"><span class="conf-row-label">ТРЕНД</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.trend}%"></div></div><span class="conf-row-val">${a.trend}%</span></div>
           <div class="conf-row"><span class="conf-row-label">НОВОСТИ</span><div class="conf-row-bar"><div class="conf-row-fill" style="width:${a.newsScore}%"></div></div><span class="conf-row-val">${a.newsScore}%</span></div>
@@ -446,6 +451,12 @@
               <span>Поддержка: ${a.indicators.support != null ? fmtPrice(a.indicators.support, 2) : '—'}</span>
               <span>Сопротивление: ${a.indicators.resistance != null ? fmtPrice(a.indicators.resistance, 2) : '—'}</span>
             </div>
+            ${a.scores ? `
+            <div class="verdict-why-news">
+              Уверенность ${a.conf}% — это взвешенная оценка: тренд ${a.scores.trend}% (вес 50%),
+              RSI ${a.scores.rsi}% (30%), уровни ${a.scores.levels}% (20%). Шкала 20–85%:
+              100% не бывает, это эвристика по индикаторам, а не прогноз.
+            </div>` : ''}
             ${a.relatedNews && a.relatedNews.length ? `
             <div class="verdict-why-news">
               Связанные новости: ${a.relatedNews.map(n => `«${n.title}» (${n.src})`).join('; ')}
@@ -742,6 +753,7 @@
         a.factors = v.factors && v.factors.length ? v.factors : ['Недостаточно данных для факторов'];
         a.indicators = v.indicators;
         a.relatedNews = v.relatedNews;
+        a.scores = v.scores; // составляющие уверенности: тренд / RSI / уровни
         a.verdictComputedAt = v.computedAt;
         a.verdictLive = true;
       });

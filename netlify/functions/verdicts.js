@@ -15,6 +15,9 @@ const STALE_MS = 12 * 60 * 60 * 1000; // старше 12 ч считаем ус�
 function needsLazyCompute(verdicts, cryptoCoins) {
   if (cryptoCoins.some((c) => !verdicts[c.id])) return true;
   if (STATIC_ASSETS.some((a) => !verdicts[a.id])) return true;
+  // вердикты старого формата (без составляющих уверенности) считаем устаревшими,
+  // чтобы после обновления движка пересчёт случился сразу, а не через 6 часов
+  if (Object.values(verdicts || {}).some((v) => !v.scores)) return true;
   const ids = Object.keys(verdicts || {});
   const newest = ids.map((id) => Date.parse(verdicts[id].computedAt || 0)).sort((a, b) => b - a)[0] || 0;
   return Date.now() - newest > STALE_MS;
@@ -32,13 +35,17 @@ exports.handler = async function (event) {
     if (needsLazyCompute(data, cryptoCoins)) {
       const newsItems = await fetchNewsContext();
       const missingCoins = cryptoCoins.filter((c) => !data[c.id]);
-      // Золото/нефть/USD-RUB добираем, только если их ещё нет (3 быстрых запроса).
-      const needStatic = STATIC_ASSETS.some((a) => !data[a.id]);
+      // Вердикты старого формата (без составляющих уверенности) требуют полного пересчёта:
+      // иначе часть активов навсегда осталась бы без них и пересчёт запускался бы вечно.
+      const staleFormat = Object.values(data).some((v) => !v.scores);
+      const needStatic = staleFormat || STATIC_ASSETS.some((a) => !data[a.id]);
 
-      // Что именно считаем: недостающие монеты; если недостающих нет, но чего-то нет из
-      // статичных — только их; иначе (сработала проверка на устаревание) пересчитываем всё.
+      // Что именно считаем: при смене формата — всё; иначе недостающие монеты;
+      // если недостающих монет нет, но не хватает статичных — только их;
+      // остальное — пересчёт по устареванию.
       let coinsToCompute;
-      if (missingCoins.length) coinsToCompute = missingCoins;
+      if (staleFormat) coinsToCompute = cryptoCoins;
+      else if (missingCoins.length) coinsToCompute = missingCoins;
       else if (needStatic) coinsToCompute = [];
       else coinsToCompute = cryptoCoins;
 

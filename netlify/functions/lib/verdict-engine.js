@@ -44,16 +44,46 @@ async function fetchStaticAssetCloses(asset) {
   }
 }
 
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+// Запасной порог расхождения EMA (в долях цены), когда диапазон 30 дней неизвестен.
+const FALLBACK_TREND_GAP = 0.06;
+
+// Силу тренда меряем расхождением EMA50/EMA200 ОТНОСИТЕЛЬНО собственной волатильности
+// актива (ширины 30-дневного диапазона). Иначе фиксированный порог даёт «100» почти всей
+// крипте (она ходит на десятки процентов) и заниженные оценки золоту и валютам.
+function trendStrength(price, ema50Val, ema200Val, support, resistance) {
+  if (!(price > 0) || ema50Val == null || ema200Val == null) return 0;
+  const gap = Math.abs(ema50Val - ema200Val) / price;
+  const hasRange = support != null && resistance != null && resistance > support;
+  // нижняя граница волатильности, чтобы совсем узкий диапазон не раздувал оценку
+  const volatility = hasRange ? Math.max((resistance - support) / price, 0.02) : FALLBACK_TREND_GAP;
+  return clamp01(gap / volatility);
+}
+
 // Строит вердикт и текстовое обоснование по чистым техническим индикаторам.
+//
+// Уверенность — НЕ фиксированное число: это взвешенная оценка трёх составляющих,
+// каждая от 0 до 1 (их же показываем на карточке отдельными шкалами):
+//   • тренд  (вес 0.5) — насколько разошлись EMA50 и EMA200 относительно цены;
+//   • RSI    (вес 0.3) — насколько RSI подтверждает направление (есть ли запас хода);
+//   • уровни (вес 0.2) — где цена внутри диапазона поддержка/сопротивление.
+// Итог отображается в диапазоне 20–85%: 100% не бывает — это эвристика, а не прогноз.
 function formOpinion({ price, rsiVal, ema50Val, ema200Val, support, resistance }) {
   const factors = [];
   let bias = 'neutral';
+  let trendScore = 0;
 
-  if (ema50Val != null && ema200Val != null) {
+  if (ema50Val != null && ema200Val != null && price > 0) {
     bias = ema50Val > ema200Val ? 'bull' : 'bear';
-    factors.push(bias === 'bull' ? 'EMA50 выше EMA200 (восходящий тренд)' : 'EMA50 ниже EMA200 (нисходящий тренд)');
-  } else if (ema50Val != null) {
+    trendScore = trendStrength(price, ema50Val, ema200Val, support, resistance);
+    const strength = trendScore > 0.66 ? 'выраженный' : trendScore > 0.33 ? 'умеренный' : 'слабый';
+    factors.push(bias === 'bull'
+      ? `EMA50 выше EMA200 (${strength} восходящий тренд)`
+      : `EMA50 ниже EMA200 (${strength} нисходящий тренд)`);
+  } else if (ema50Val != null && price > 0) {
     bias = price > ema50Val ? 'bull' : 'bear';
+    trendScore = clamp01(Math.abs(price - ema50Val) / price / FALLBACK_TREND_GAP);
     factors.push(bias === 'bull' ? 'цена выше EMA50' : 'цена ниже EMA50');
   }
 
@@ -64,32 +94,59 @@ function formOpinion({ price, rsiVal, ema50Val, ema200Val, support, resistance }
     factors.push(`RSI ${rsiVal.toFixed(0)}${rsiZone === 'oversold' ? ' (перепроданность)' : rsiZone === 'overbought' ? ' (перекупленность)' : ''}`);
   }
 
+  // Насколько RSI подтверждает направление: для покупки хорош запас снизу (RSI ближе к 30),
+  // для продажи — запас сверху (RSI ближе к 70). Нейтральные 50 дают ровно половину.
+  let rsiScore = 0.5;
+  if (rsiVal != null) {
+    rsiScore = bias === 'bear' ? clamp01((rsiVal - 30) / 40) : clamp01((70 - rsiVal) / 40);
+  }
+
+  // Где цена внутри диапазона: покупать выгоднее у поддержки, продавать — у сопротивления.
+  let levelScore = 0.5;
   if (support != null && resistance != null && resistance > support) {
-    const rangePos = (price - support) / (resistance - support);
+    const rangePos = clamp01((price - support) / (resistance - support));
+    levelScore = bias === 'bear' ? rangePos : 1 - rangePos;
     if (rangePos > 0.85) factors.push('цена у сопротивления');
     else if (rangePos < 0.15) factors.push('цена у поддержки');
   }
 
   let verdict = 'wait';
   let direction = null;
-  let confidence = 35;
+  let confidence;
 
-  if (bias === 'bull' && rsiZone !== 'overbought') {
-    verdict = 'buy'; direction = 'long';
-    confidence = 55 + (rsiZone === 'oversold' ? 15 : 0);
-  } else if (bias === 'bear' && rsiZone !== 'oversold') {
-    verdict = 'sell'; direction = 'short';
-    confidence = 55 + (rsiZone === 'overbought' ? 15 : 0);
-  } else if (rsiZone === 'oversold' || rsiZone === 'overbought') {
-    verdict = 'wait';
-    confidence = 40;
+  const conflict = (bias === 'bull' && rsiZone === 'overbought') || (bias === 'bear' && rsiZone === 'oversold');
+
+  if (bias !== 'neutral' && !conflict) {
+    verdict = bias === 'bull' ? 'buy' : 'sell';
+    direction = bias === 'bull' ? 'long' : 'short';
+    confidence = 20 + 65 * (0.5 * trendScore + 0.3 * rsiScore + 0.2 * levelScore);
+  } else if (conflict) {
+    // Тренд и RSI спорят — уверенность в «не входить» тем выше, чем сильнее расхождение.
+    const extremeness = rsiZone === 'overbought' ? clamp01((rsiVal - 70) / 20) : clamp01((30 - rsiVal) / 20);
+    confidence = 40 + 35 * extremeness;
     factors.push('сигнал неоднозначный — тренд и RSI расходятся');
+  } else {
+    // Нет данных по тренду (слишком короткая история) — доверять нечему.
+    confidence = 25;
+    factors.push('недостаточно истории для оценки тренда');
   }
 
-  confidence = Math.max(20, Math.min(85, confidence));
+  confidence = Math.round(Math.max(20, Math.min(85, confidence)));
   const verdictLabel = verdict === 'buy' ? 'BUY' : verdict === 'sell' ? 'SELL' : 'НЕ ВХОДИТЬ';
 
-  return { verdict, verdictLabel, direction, confidence, factors };
+  return {
+    verdict,
+    verdictLabel,
+    direction,
+    confidence,
+    factors,
+    // составляющие уверенности (0–100) — показываются на карточке отдельными шкалами
+    scores: {
+      trend: Math.round(trendScore * 100),
+      rsi: Math.round(rsiScore * 100),
+      levels: Math.round(levelScore * 100),
+    },
+  };
 }
 
 // Ищет недавние новости, упоминающие актив (по имени/тикеру), для показа как контекста.
