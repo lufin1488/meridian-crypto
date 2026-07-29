@@ -724,9 +724,11 @@
   }
 
   // Вердикты, посчитанные indicators-refresh.js (RSI/EMA/уровни) — раз в 6 часов.
-  async function fetchVerdicts(){
+  // bustCache=true обходит CDN-кэш (нужно для разовой до-загрузки, см. initialLoad)
+  async function fetchVerdicts(bustCache){
     try{
-      const res = await fetch('/.netlify/functions/verdicts');
+      const url = '/.netlify/functions/verdicts' + (bustCache ? '?t=' + Date.now() : '');
+      const res = await fetch(url);
       if(!res.ok) throw new Error('verdicts function not ok');
       const data = await res.json();
       let any = false;
@@ -751,7 +753,14 @@
     await fetchCryptoList(); // сначала список активов, чтобы дальнейшие запросы знали актуальные id
     fetchLiveData();
     fetchNews();
-    fetchVerdicts();
+    await fetchVerdicts();
+
+    // Первый посетитель после «холодного старта» запускает досчёт вердиктов на сервере
+    // и успевает получить неполный (закэшированный) ответ. Один повтор в обход CDN-кэша
+    // подтягивает дозаполненные вердикты через полминуты, а не через 10 минут.
+    if(assets.some(a => !a.verdictLive)){
+      setTimeout(() => fetchVerdicts(true), 30000);
+    }
   })();
 
   setInterval(fetchLiveData, 60000); // обновление котировок раз в минуту
