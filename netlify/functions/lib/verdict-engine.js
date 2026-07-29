@@ -9,6 +9,7 @@
 const { rsi, ema, supportResistance } = require('./indicators');
 const { coinGeckoHeaders } = require('./coingecko');
 const { STATIC_ASSETS } = require('./assets-registry');
+const { fetchYahooSeries } = require('./yahoo');
 
 async function fetchCryptoCloses(coinGeckoId) {
   // Без interval=daily: для days>90 CoinGecko и так отдаёт дневные точки (auto-granularity),
@@ -28,6 +29,19 @@ async function fetchTwelveDataCloses(symbol) {
   const data = await res.json();
   if (!data.values) throw new Error(`Twelve Data time_series ${symbol}: ${data.message || 'нет данных'}`);
   return data.values.map((v) => parseFloat(v.close)).reverse(); // Twelve Data отдаёт новые→старые
+}
+
+// История для золота/нефти/USD-RUB: сначала Twelve Data, при неудаче — Yahoo (без ключа).
+// Для нефти Twelve Data на бесплатном тарифе не отдаёт данные вовсе, поэтому резерв
+// здесь не «на всякий случай», а основной рабочий путь.
+async function fetchStaticAssetCloses(asset) {
+  try {
+    return await fetchTwelveDataCloses(asset.twelveDataSymbol);
+  } catch (err) {
+    if (!asset.yahooSymbol) throw err;
+    const { closes } = await fetchYahooSeries(asset.yahooSymbol, '1y');
+    return closes;
+  }
 }
 
 // Строит вердикт и текстовое обоснование по чистым техническим индикаторам.
@@ -123,7 +137,7 @@ async function computeVerdicts(cryptoCoins, newsItems, { includeStatic = true } 
       ? STATIC_ASSETS.map((asset) => ({
           id: asset.id,
           newsNames: [asset.newsTag],
-          fetchCloses: () => fetchTwelveDataCloses(asset.twelveDataSymbol),
+          fetchCloses: () => fetchStaticAssetCloses(asset),
         }))
       : []),
   ];

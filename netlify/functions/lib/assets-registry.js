@@ -3,10 +3,13 @@
 
 // Активы, которые не входят в динамический крипто-топ-10 (форекс/товары) —
 // технические индикаторы по ним считаются через Twelve Data.
+// yahooSymbol — резервный источник (lib/yahoo.js): бесплатный тариф Twelve Data
+// покрывает форекс/акции/крипту, но НЕ энергоносители, поэтому WTI приходит только
+// оттуда. Для остальных Yahoo служит подстраховкой, если Twelve Data недоступен.
 const STATIC_ASSETS = [
-  { id: 'xau', name: 'XAU/USD (Золото)', class: 'commodity', source: 'twelvedata', twelveDataSymbol: 'XAU/USD', tvSymbol: 'TVC:GOLD', newsTag: 'XAU' },
-  { id: 'wti', name: 'WTI (Нефть)', class: 'commodity', source: 'twelvedata', twelveDataSymbol: 'WTI/USD', tvSymbol: 'TVC:USOIL', newsTag: 'WTI' },
-  { id: 'usdrub', name: 'USD/RUB', class: 'forex', source: 'twelvedata', twelveDataSymbol: 'USD/RUB', tvSymbol: 'FX_IDC:USDRUB', newsTag: 'USD/RUB' },
+  { id: 'xau', name: 'XAU/USD (Золото)', class: 'commodity', source: 'twelvedata', twelveDataSymbol: 'XAU/USD', yahooSymbol: 'GC=F', tvSymbol: 'TVC:GOLD', newsTag: 'XAU' },
+  { id: 'wti', name: 'WTI (Нефть)', class: 'commodity', source: 'twelvedata', twelveDataSymbol: 'WTI/USD', yahooSymbol: 'CL=F', tvSymbol: 'TVC:USOIL', newsTag: 'WTI' },
+  { id: 'usdrub', name: 'USD/RUB', class: 'forex', source: 'twelvedata', twelveDataSymbol: 'USD/RUB', yahooSymbol: 'RUB=X', tvSymbol: 'FX_IDC:USDRUB', newsTag: 'USD/RUB' },
 ];
 
 // Монеты, которые технически попадают в топ по капитализации, но не годятся для
