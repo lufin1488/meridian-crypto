@@ -59,8 +59,10 @@ exports.handler = async function (event) {
       if (computed && Object.keys(computed).length) {
         // перечитываем свежий блоб прямо перед записью и сливаемся в него — чтобы
         // параллельные on-demand пересчёты накапливались, а не затирали друг друга.
+        // Порядок важен: снимок из начала запроса (data) — самый старый, затем более
+        // свежий latest, и последним — только что посчитанное.
         const latest = (await store.get('verdicts', { type: 'json' })) || {};
-        data = { ...latest, ...data, ...computed };
+        data = { ...data, ...latest, ...computed };
         await store.setJSON('verdicts', data);
       }
     }

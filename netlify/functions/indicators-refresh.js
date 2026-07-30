@@ -7,6 +7,7 @@
 const { schedule } = require('@netlify/functions');
 const { connectLambda, getStore } = require('@netlify/blobs');
 const { computeVerdicts, fetchNewsContext } = require('./lib/verdict-engine');
+const { STATIC_ASSETS } = require('./lib/assets-registry');
 
 async function run() {
   const store = getStore('meridian-data');
@@ -33,12 +34,22 @@ async function run() {
     }
   }
 
-  await store.setJSON('verdicts', newVerdicts);
+  // Сливаем с предыдущими, а НЕ затираем: если часть активов не отдалась (лимит API,
+  // сетевой сбой), их вердикты должны остаться прошлыми, а не исчезнуть с сайта.
+  // Заодно отсеиваем активы, выпавшие из текущего топ-10, чтобы блоб не рос бесконечно.
+  const trackedIds = new Set([...cryptoCoins.map((c) => c.id), ...STATIC_ASSETS.map((a) => a.id)]);
+  const merged = {};
+  for (const id of trackedIds) {
+    if (newVerdicts[id]) merged[id] = newVerdicts[id];
+    else if (prevVerdicts[id]) merged[id] = prevVerdicts[id];
+  }
+
+  await store.setJSON('verdicts', merged);
   await store.setJSON('notify-queue', notifyQueue);
 
   if (errors.length) console.warn('indicators-refresh: часть активов не обработана:', errors.join('; '));
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true, computed: Object.keys(newVerdicts).length, errors }) };
+  return { statusCode: 200, body: JSON.stringify({ ok: true, computed: Object.keys(newVerdicts).length, kept: Object.keys(merged).length, errors }) };
 }
 
 exports.handler = schedule('0 */6 * * *', async (event) => {
